@@ -1,10 +1,6 @@
 ## Project direction: original Unity engine
 
-The APK's embedded engine marker has now been verified as **Unity 4.5.5f1** (not 4.0.0.1f). The goal is to restore the original Unity project and build a Windows Standalone player, rather than treating the Python/Pygame implementation as the final game. The new `UnityProject/` tree contains recovered gameplay C# sources and decoded original game data as the starting point. It is not yet a complete/openable game: serialized scenes/prefabs, tk2d assets, plugin dependencies, and audio still need to be restored and verified.
-
-# Crevice Hero — Faithful PC Reconstruction
-
-A private-use PC reconstruction of Crevice Hero, using the prior analysis work rather than the earlier endless-runner placeholder.
+The APK's embedded engine marker is **Unity 4.5.5f1**. The `UnityProject/` directory now contains an AssetRipper-reconstructed Unity project with the original serialized `SplashScene` and `PlayScene`, recovered prefabs, Resources, scripts, audio, and project settings. The Python/Pygame build is not the fidelity target. Windows compilation and side-by-side validation still need to be performed in Unity 4.5.5f1.
 
 ## What this project reuses
 

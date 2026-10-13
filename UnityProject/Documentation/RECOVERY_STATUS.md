@@ -1,12 +1,13 @@
-# Original Unity project recovery status
+# Recovery status
 
-- [x] Inspected the original APK's embedded Unity version marker: `4.5.5f1`.
-- [x] Located the recovered `Assembly-CSharp.dll` and decompiled gameplay C# sources.
-- [x] Added original gameplay source and decoded configuration data to a Unity-oriented project tree.
-- [ ] Export and restore original serialized scenes and prefab hierarchy.
-- [ ] Restore tk2d sprite collections, animation clips, fonts, and UI layout.
-- [ ] Restore original audio and required plugin assemblies or replace platform-only service adapters.
-- [ ] Open and validate the project with the matching Unity editor.
-- [ ] Build a Windows Standalone player and compare screenshots/behaviour against the Android original.
+- [x] Confirm the original APK engine version: Unity 4.5.5f1.
+- [x] Run AssetRipper against the extracted Unity data.
+- [x] Export an original-version Unity project.
+- [x] Restore `SplashScene` and `PlayScene` serialized scene files.
+- [x] Restore 56 prefabs and the original Resources, textures, audio, sprites, scripts, plugin sources, and project settings.
+- [ ] Open the project in Unity 4.5.5f1 and inspect compiler/editor errors.
+- [ ] Repair platform-specific or missing SDK dependencies without changing core gameplay.
+- [ ] Build Windows Standalone.
+- [ ] Verify launch, controls, animation, collision, stage progression, skills, UI, and audio against the Android original.
 
-No claim of exact matching should be made until the remaining items are completed and tested.
+This status is intentionally evidence-based: extraction succeeded; Windows compilation and fidelity validation have not yet been performed.

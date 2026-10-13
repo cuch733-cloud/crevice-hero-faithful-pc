@@ -1,20 +1,24 @@
-# Crevice Hero — original Unity-engine reconstruction
+# Crevice Hero — recovered original Unity project
 
-This is the Unity-engine reconstruction track. The Python/Pygame prototype is not the target for exact fidelity.
+This project was reconstructed from the original `Crevice_Hero_1.1.5.apk` using AssetRipper 2.0.0 and the recovered Mono assembly.
 
-## Verified original engine
+## Verified engine version
 
-The original Android package `Crevice_Hero_1.1.5.apk` contains the Unity version marker **4.5.5f1**. It is not Unity 4.0.0.1f. The recovered managed assembly is `Assembly-CSharp.dll`; the gameplay scripts in `Assets/Scripts` were decompiled from that assembly and are intended as source references for reconstructing the original project.
+The APK contains the Unity version marker **4.5.5f1**. The exported project settings also identify `4.5.5f1`. The user's earlier guess of `4.0.0.1f` was close in era but not the version in this APK.
 
-## Current state / important limitation
+## Recovered into this project
 
-This is a source-and-data migration scaffold, not yet an openable or faithful Unity project. The original serialized scenes/prefabs, tk2d sprite collection/animation assets, plugin dependencies, and audio must still be reconstructed or recovered from the APK's Unity asset files. The copied scripts reference third-party packages and Unity scene objects and cannot compile as a complete game without those dependencies and scene wiring.
+- Original serialized `SplashScene` and `PlayScene` scene files.
+- 56 recovered prefabs, including the original character animation prefabs and skill background.
+- Original Resources textures, sprite atlases, audio clips, fonts, materials, shaders, map/character/gem/language data.
+- Decompiled gameplay and UI C# scripts from the game's Mono assembly, plus exported plugin sources and assemblies where present.
+- Original Unity `ProjectSettings` and build scene list.
 
-The exact route is to reconstruct the Unity 4.5.5f1 project and its original scene/prefab hierarchy, preserve the original gameplay scripts, then add a Windows Standalone target. Do not treat the existing Pygame executable as the faithful build.
+## What remains before claiming a faithful Windows build
 
-## Source/data provenance
+1. Open with Unity **4.5.5f1** (or first test import compatibility in a newer editor without overwriting the recovered copy).
+2. Resolve any compile errors from Android-only SDKs / missing third-party plugins and ensure Windows builds use the original gameplay scripts, not the Python prototype.
+3. Build a Windows Standalone player and test both scenes.
+4. Compare gameplay, animation, controls, physics, audio and UI side-by-side with the Android original. A recovered scene/project is a major step, not proof the Windows build is already identical.
 
-- `Assets/Scripts`: recovered/decompiled original C# gameplay scripts.
-- `Assets/OriginalData`: extracted character, map, gem, and language data.
-
-Keep this repository private. Original assets/code may be subject to the original rights holder's terms.
+The current project is a recovery result and may need editor-side repairs. Do not redistribute the original game's assets or code publicly; keep this repository private and respect the rights holder's terms.
