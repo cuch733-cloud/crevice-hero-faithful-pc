@@ -1,0 +1,49 @@
+id,ko,en
+skill1,정지,Stop Time
+skill2,보호막,Invincibility
+skill3,가이드,Gimme shelter
+skill4,스피드 부스터,Speed Boost
+skill5,순간이동,Teleport
+skill6,부활,Revival
+skill7,보석 파티,Gem Party
+skill8,공중 부양,Flight
+skill9,스피드 부스터,Speed Boost
+skill10,느림,Slow Time
+skill11,투명,Invisibility
+skill12,망치,Hammering
+skill13,얼음 마법,Freeze Spell
+skill14,야수 변신,Transformation
+skill15,축구공,Football
+skill16,미사일,Missile
+player0,보석 사냥꾼,Gem Hunter
+player1,여전사,Gun Girl
+player2,고등학생,Parka Guy
+player3,좀비,Zombie
+player4,누렁이,Puppy
+player5,수학 교사,Math Teacher 
+player6,스케이트보더,Skateboarder
+player7,금발머리,Blonde
+player8,레인저,Ranger
+player9,고양이,Kitten
+player10,마술사,Illusionist
+player11,드워프,Dwarf
+player12,얼음 공주,Ice Princess
+player13,야수,Beast
+player14,축구 선수,Footballer
+player15,로봇,Robot
+quit_play,게임을 끝내시겠습니까?,Are you sure you want to quit?
+quit_game,게임을 끝내시겠습니까?,Are you sure to quit?
+not_enough_gem,보석이 부족합니다!,Not enough gems!
+cash1,₩1000,$1.00
+cash2,₩2000,$2.00
+cash3,₩3000,$3.00
+language,언어:,Language:
+distance,거리:,Distance:
+max_distance,최고 기록:,Max Distance:
+language_val,한국어,English
+level,레벨,Lv.
+cooltime,쿨다운,Cooldown
+speed,이동 속도,Speed
+loading,로딩 중,Loading
+touch_screen,화면을 터치하세요,TOUCH TO START
+to_be_updated,업데이트 예정입니다.,To be updated

@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+reference/sharedassets1.assets
+reference/sharedassets1.assets.*

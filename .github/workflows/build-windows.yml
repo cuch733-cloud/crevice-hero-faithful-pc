@@ -1,0 +1,39 @@
+name: Build Windows PC version
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pygame==2.6.1 pyinstaller
+      - name: Syntax check
+        run: python -m py_compile crevice_hero.py
+      - name: Run smoke tests
+        shell: pwsh
+        run: |
+          $env:SDL_VIDEODRIVER = "dummy"
+          $env:SDL_AUDIODRIVER = "dummy"
+          python -m unittest discover -s tests -v
+      - name: Build Windows executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name CreviceHeroPC --add-data "assets;assets" --add-data "reference/original_data;reference/original_data" crevice_hero.py
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: CreviceHeroPC-Windows-x64
+          path: dist/CreviceHeroPC.exe
+          if-no-files-found: error
+          retention-days: 30
