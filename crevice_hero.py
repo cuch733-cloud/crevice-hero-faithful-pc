@@ -49,6 +49,21 @@ def load_atlas(n):
 
 atlases = {n: load_atlas(n) for n in (15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28)}
 rock_texture = atlases[15]
+ORIGINAL_TEXTURES = ASSET / "original_textures"
+background_textures = {
+    theme: [load_image(ORIGINAL_TEXTURES / "bg_{}_back_{:02d}.png".format(theme, order))
+            for order in range(3)]
+    for theme in range(4)
+}
+stage_textures = {theme: load_image(ORIGINAL_TEXTURES / "bg_{}_stage.png".format(theme))
+                  for theme in range(5)}
+stage_floor_textures = {theme: load_image(ORIGINAL_TEXTURES / "bg_{}_stage_floor.png".format(theme))
+                        for theme in range(5)}
+stage_ceiling_textures = {theme: load_image(ORIGINAL_TEXTURES / "bg_{}_stage_ceiling.png".format(theme))
+                          for theme in range(5)}
+stage_tiles = {theme: pygame.transform.scale(im, (256, 256))
+               for theme, im in stage_textures.items() if im is not None}
+scaled_bg_cache = {}
 title_logo = load_image(ASSET / "title_logo.png")
 if title_logo:
     title_logo = pygame.transform.smoothscale(title_logo, (390, 191))
@@ -140,6 +155,9 @@ try:
 except OSError:
     pass
 
+gem_sprites = [load_image(p) for p in sorted((ASSET / "gems").glob("gem_*.png"))]
+gem_sprites = [im for im in gem_sprites if im is not None]
+
 def load_save():
     defaults = {"max_distance": 0, "coins": 0, "selected": 0, "sound": True, "plays": 0}
     try:
@@ -152,6 +170,7 @@ def load_save():
 save = load_save()
 selected = max(0, min(15, int(save.get("selected", 0))))
 screen_name = "title"
+theme_id = 3
 play_state = "up_stop"
 play_timer = 0.0
 roof_offset = 3.5
@@ -235,9 +254,22 @@ def blit_world(img, wx, wy, width, height, flip=False):
     sx, sy = world_to_screen(wx, wy)
     screen.blit(frame, (sx - sw // 2, sy - sh // 2))
 
+def map_phase_index():
+    return int(((slam_count / 3.0) + (int(distance) // 30)) * .5)
+
 def choose_map_phase():
-    phase_index = int(((slam_count / 3.0) + (int(distance) // 30)) * .5)
-    return map_data[min(len(map_data) - 1, max(0, phase_index))]
+    return map_data[min(len(map_data) - 1, max(0, map_phase_index()))]
+
+def choose_theme():
+    phase = map_phase_index()
+    even_play = int(save.get("plays", 0)) % 2 == 0
+    if phase <= 2:
+        return 0
+    if phase <= 5:
+        return 1 if even_play else 3
+    if phase <= 8:
+        return 2
+    return 3 if even_play else 1
 
 def gen_segment(x, initial=False):
     global next_hole_x, prev_floor_grid, map_span_grid, map_segment_index, gems_this_chunk
@@ -304,7 +336,7 @@ def gen_segment(x, initial=False):
         elif turn_value == 2 and map_segment_index in (2, 4):
             gem_here = True
     if gem_here:
-        gems.append({"x": x + width * .5, "y": floor_y + .7,
+        gems.append({"x": x + width * .5, "y": floor_y + .7, "kind": random.randrange(max(1, len(gem_sprites))),
                      "taken": False, "phase": random.random() * math.tau})
         gems_this_chunk += 1
 
@@ -406,6 +438,7 @@ def trigger_skill(manual=True):
             if world_x + .5 < seg["x"] < world_x + 8 and spawned < 5:
                 for k in range(min(5 - spawned, max(1, min(3, int(seg["w"] / 1.2))))):
                     gems.append({"x": seg["x"] + .4 + k * .45, "y": seg["floor"] + 1.0,
+                                 "kind": random.randrange(max(1, len(gem_sprites))),
                                  "taken": False, "phase": random.random() * math.tau})
                     spawned += 1
     elif sid == 8:               # flight skill
@@ -476,37 +509,46 @@ def draw_rock_block(rect, ceiling=False, warning=False):
     if w <= 0 or h <= 0:
         return
     px = int(x); py = int(y); pw = max(1, int(w)); ph = max(1, int(h))
-    if rock_texture is None:
+    tile = stage_tiles.get(theme_id)
+    if tile is None:
+        tile = pygame.transform.scale(rock_texture, (256, 256)) if rock_texture is not None else None
+    if tile is None:
         pygame.draw.rect(screen, (72, 54, 44), (px, py, pw, ph))
-        return
-    tile = pygame.transform.scale(rock_texture, (128, 128))
-    # Tile the original cave-rock texture instead of drawing generic platforms.
-    for yy in range(py, py + ph, 128):
-        for xx in range(px, px + pw, 128):
-            screen.blit(tile, (xx, yy), area=(0, 0, min(128, px + pw - xx), min(128, py + ph - yy)))
-    edge = (226, 167, 112) if warning else (122, 99, 81)
-    if ceiling:
-        pygame.draw.line(screen, edge, (px, py + ph - 2), (px + pw, py + ph - 2), 4)
     else:
-        pygame.draw.line(screen, edge, (px, py), (px + pw, py), 4)
+        for yy in range(py, py + ph, 256):
+            for xx in range(px, px + pw, 256):
+                screen.blit(tile, (xx, yy), area=(0, 0, min(256, px + pw - xx), min(256, py + ph - yy)))
+    strip = (stage_ceiling_textures if ceiling else stage_floor_textures).get(theme_id)
+    if strip is not None:
+        strip_y = py + ph - strip.get_height() if ceiling else py
+        for xx in range(px, px + pw, strip.get_width()):
+            screen.blit(strip, (xx, strip_y),
+                        area=(0, 0, min(strip.get_width(), px + pw - xx), strip.get_height()))
+    if warning:
+        edge_y = py + ph - 2 if ceiling else py
+        pygame.draw.line(screen, (255, 213, 145), (px, edge_y), (px + pw, edge_y), 2)
 
-def draw_background():
-    screen.fill(BG)
-    # Three parallax cave layers, with subdued original texture and small glints.
-    for i in range(3):
-        y = 100 + i * 160
-        offset = int((camera_x * (10 + i * 7)) % 220)
-        color = (23 + i * 4, 54 + i * 4, 67 + i * 3)
-        pygame.draw.rect(screen, color, (0, y, W, 2))
-        for j in range(-1, 12):
-            xx = j * 150 - offset
-            pygame.draw.polygon(screen, (color[0] + 3, color[1] + 4, color[2] + 3),
-                                [(xx, y + 2), (xx + 70, y - 45 - i * 6),
-                                 (xx + 140, y + 2)])
-    for i in range(42):
-        x = (i * 139 - int(camera_x * 26)) % W
-        y = 70 + (i * 71) % 590
-        pygame.draw.circle(screen, (77, 123, 136), (x, y), 1 if i % 3 else 2)
+def draw_background(theme_override=None):
+    theme = theme_id if theme_override is None else int(theme_override)
+    layers = background_textures.get(theme, background_textures.get(3, []))
+    cache_key = (theme, W, H)
+    if cache_key not in scaled_bg_cache:
+        scaled_bg_cache[cache_key] = [
+            pygame.transform.scale(layer, (W, H)) if layer is not None else None
+            for layer in layers
+        ]
+    scaled = scaled_bg_cache[cache_key]
+    rates = (0.0, 0.18, 0.34)
+    if not scaled or scaled[0] is None:
+        screen.fill(BG)
+        return
+    for i, layer in enumerate(scaled):
+        if layer is None:
+            continue
+        scroll = int(camera_x * rates[i] * 100) % max(1, W)
+        screen.blit(layer, (-scroll, 0))
+        if scroll:
+            screen.blit(layer, (W - scroll, 0))
 
 def draw_world():
     draw_background()
@@ -532,11 +574,16 @@ def draw_world():
         sx, sy = world_to_screen(g["x"], g["y"])
         if -20 < sx < W + 20 and -20 < sy < H + 20:
             pulse = 1 + int(2 * math.sin(pygame.time.get_ticks() / 180 + g["phase"]))
-            pts = [(sx, sy - 13 - pulse), (sx + 10 + pulse, sy),
-                   (sx, sy + 13 + pulse), (sx - 10 - pulse, sy)]
-            pygame.draw.polygon(screen, CYAN, pts)
-            pygame.draw.polygon(screen, WHITE, pts, 2)
-            pygame.draw.line(screen, (255, 255, 255), (sx, sy - 8), (sx, sy + 8), 1)
+            if gem_sprites:
+                sprite = gem_sprites[int(g.get("kind", 0)) % len(gem_sprites)]
+                size = 26 + pulse
+                sprite = pygame.transform.scale(sprite, (size, size))
+                screen.blit(sprite, sprite.get_rect(center=(sx, sy)))
+            else:
+                pts = [(sx, sy - 13 - pulse), (sx + 10 + pulse, sy),
+                       (sx, sy + 13 + pulse), (sx - 10 - pulse, sy)]
+                pygame.draw.polygon(screen, CYAN, pts)
+                pygame.draw.polygon(screen, WHITE, pts, 2)
     # Character sprite. We use the original sprite sheet art; fallback is vector-drawn.
     family = CHAR_FAMILY[selected % len(CHAR_FAMILY)]
     frames = hero_animations.get(family, [])
@@ -668,12 +715,13 @@ def rect_for_player():
     return pygame.Rect(px - width // 2, py - height // 2, width, height)
 
 def update_game(dt, keys):
-    global world_x, world_y, vel_x, vel_y, grounded, dead, camera_x, camera_y
+    global world_x, world_y, vel_x, vel_y, grounded, dead, camera_x, camera_y, theme_id
     global skill_timer, skill_active, shield_timer, magnet_timer, speed_timer, pattern_id
     global distance, warning_flash, freeze_timer, slow_timer, fly_timer, skill_id_active
     if paused or dead:
         return
     move_phase(dt)
+    theme_id = choose_theme()
     ch = characters[selected]
     skill_need = int((ch.get("cooltime") or [10])[0])
     if cool_count >= skill_need and int(ch.get("skill_id", 7)) not in (12, 15, 16) and not skill_active:
@@ -854,7 +902,7 @@ def keydown(key):
             screen_name = "title"
 
 def main():
-    global screen, W, H, camera_x
+    global screen, W, H, camera_x, scaled_bg_cache
     running = True
     while running:
         dt = min(.04, clock.tick(FPS) / 1000.0)
@@ -866,6 +914,7 @@ def main():
             elif event.type == pygame.VIDEORESIZE:
                 W, H = max(900, event.w), max(600, event.h)
                 screen = pygame.display.set_mode((W, H), pygame.RESIZABLE)
+                scaled_bg_cache.clear()
             elif event.type == pygame.KEYDOWN:
                 keydown(event.key)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:

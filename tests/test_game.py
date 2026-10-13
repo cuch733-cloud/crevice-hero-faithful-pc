@@ -11,8 +11,17 @@ class GameSmokeTests(unittest.TestCase):
         self.assertEqual(game.characters[0]["name"], "JOHN")
         self.assertEqual(game.characters[1]["name"], "GIRL")
 
+    def test_original_theme_and_stage_textures_loaded(self):
+        self.assertEqual(set(game.background_textures.keys()), {0, 1, 2, 3})
+        self.assertTrue(all(all(layer is not None for layer in layers)
+                            for layers in game.background_textures.values()))
+        self.assertEqual(len(game.stage_tiles), 5)
+        self.assertIsNotNone(game.stage_floor_textures[0])
+        self.assertIsNotNone(game.stage_ceiling_textures[0])
+
     def test_original_gem_pattern_resource_loaded(self):
         self.assertEqual(len(game.gem_data), 5)
+        self.assertEqual(len(game.gem_sprites), 16)
         row = next(r for r in game.gem_data if r.get("id") == "1")
         self.assertEqual([int(row["turn{}".format(i)]) for i in range(1, 6)], [1, 1, 2, 3, 3])
 

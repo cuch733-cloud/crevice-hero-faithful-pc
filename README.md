@@ -6,7 +6,7 @@ A private-use PC reconstruction of Crevice Hero, using the prior analysis work r
 
 - The original GameController, Hero, Map, Rock, Gem, and related C# gameplay scripts decompiled from the supplied Unity/Mono build.
 - The game's embedded char, map, and gem data, extracted from the original Unity assets and decoded into reference/original_data/.
-- Original sprite atlases, cave texture, character artwork, and the title logo from the extracted assets.
+- Original sprite atlases, 16 cropped original gem sprites, all recovered theme 0–4 stage textures, 12 original parallax backgrounds, character artwork, and the title logo from the extracted assets.
 - The original game's 16-character roster, character speed/size/skill metadata, map-phase timings, and ceiling-slam cycle as implementation references.
 
 ## Current PC build
@@ -34,6 +34,6 @@ On Windows, run build_windows.bat, or download the workflow artifact from the Ac
 
 ## Accuracy notes
 
-This is a substantially closer reconstruction than the previous prototype, but it is not yet a bit-for-bit or pixel-perfect port of the original Unity game. The original gameplay code and configuration data are available as reference, while Unity scene/prefab wiring, the full 16 tk2d animation-library mappings, exact prefab colliders, some special-skill effects, and original audio still need further reconstruction and side-by-side validation. Android-only billing, ads, Google Play, and social services are intentionally omitted.
+This is a substantially closer reconstruction than the previous prototype, but it is not yet a bit-for-bit or pixel-perfect port of the original Unity game. The original gameplay code and configuration data are available as reference, and the recovered background/stage art is now used in-game. Unity scene/prefab wiring, the exact 16 tk2d animation-library mappings, exact prefab colliders, some special-skill effects, and original audio still need further reconstruction and side-by-side validation. Android-only billing, ads, Google Play, and social services are intentionally omitted.
 
 This repository is intended to remain private. Original game assets and decompiled code remain subject to their rights holders' terms; do not publish or redistribute them without permission.
