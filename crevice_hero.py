@@ -181,6 +181,9 @@ segments = []
 gems = []
 particles = []
 warning_flash = 0.0
+next_hole_x = 5.6
+prev_floor_grid = 2
+pattern_id = 0
 last_result = {}
 last_save_tick = 0
 mouse_down = False
@@ -230,29 +233,49 @@ def blit_world(img, wx, wy, width, height, flip=False):
     screen.blit(frame, (sx - sw // 2, sy - sh // 2))
 
 def choose_map_phase():
-    return map_data[min(len(map_data) - 1, max(0, int((slam_count / 3 + distance / 30) * .5)))]
+    phase_index = int(((slam_count / 3.0) + (int(distance) // 30)) * .5)
+    return map_data[min(len(map_data) - 1, max(0, phase_index))]
 
 def gen_segment(x, initial=False):
+    global next_hole_x, prev_floor_grid
     cfg = choose_map_phase()
-    # Original Map.GetRockWidth expands weighted pattern tables into widths of
-    # 2–5 grid cells. GRID_SCALE is 0.7 world units in the source.
-    weights = ([1, 2, 3, 2, 1, 0, 0, 0, 0, 0] if slam_count % 5 < 2
-               else [0, 2, 3, 3, 2, 1, 0, 0, 0, 0])
-    grid_width = random.choice([i + 2 for i, count in enumerate(weights) for _ in range(count)] or [2, 3, 4])
+    # Weighted width tables transcribed from Map.GenPatterns in the original C#.
+    pattern_weights = [
+        [1, 2, 3, 2, 1, 0, 0, 0, 0, 0],
+        [0, 2, 3, 3, 2, 1, 0, 0, 0, 0],
+        [0, 0, 0, 3, 3, 3, 2, 1, 1, 1],
+        [0, 0, 0, 0, 1, 1, 2, 2, 2, 2],
+        [0, 1, 0, 0, 0, 0, 0, 1, 1, 0],
+    ]
+    weights = pattern_weights[max(0, min(4, pattern_id))]
+    width_choices = [i + 2 for i, count in enumerate(weights) for _ in range(count)]
+    grid_width = random.choice(width_choices or [2, 3, 4])
     width = grid_width * .7
-    floor_y = random.uniform(.9, 1.75)
+    # Approximate MakeSubRocks' neighbour-height constraint with original phase maxHeight.
+    low = max(1, prev_floor_grid - 2)
+    high = max(low + 1, min(int(cfg["maxHeight"]), prev_floor_grid + 3))
+    floor_grid = random.randrange(low, high)
+    if floor_grid == prev_floor_grid:
+        floor_grid = floor_grid + 1 if floor_grid < (1 + int(cfg["maxHeight"])) * .5 else floor_grid - 1
+    floor_grid = max(1, min(int(cfg["maxHeight"]), floor_grid))
+    prev_floor_grid = floor_grid
+    floor_y = floor_grid * .7
     hole = False
-    if not initial:
-        # MakeSubRocks creates a matching ceiling/floor crevice. During the
-        # slam, ordinary ceiling rocks reach the floor; a crevice retains two
-        # grid cells of headroom so the player can survive there.
-        if slam_count <= 2 and 4.0 <= x <= 12.5:
-            hole = True
+    hole_height = 0.0
+    # Original Map.MakeSubRocks starts with a crevice after 8 grid cells.
+    if not initial and x + width >= next_hole_x:
+        hole = True
+        half_chance = max(0, min(100, int(cfg["holeHalfPercent"]))) / 100.0
+        if random.random() < half_chance or floor_grid == int(cfg["maxHeight"]):
+            hole_height = 2.1
         else:
-            hole_chance = min(.72, .08 + cfg["holeOutPercent"] / 135
-                              + cfg["holeLeftPercent"] / 320)
-            hole = random.random() < hole_chance
-    seg = {"x": x, "w": width, "floor": floor_y, "hole": hole}
+            hole_height = 1.4
+        if random.random() < max(0, min(100, int(cfg["holeOutPercent"]))) / 100.0:
+            next_hole_x = x + width + random.uniform(12.6, 18.9)
+        else:
+            next_hole_x = x + width + random.uniform(3.8, 12.6)
+    seg = {"x": x, "w": width, "floor": floor_y, "hole": hole,
+           "hole_height": hole_height, "floor_grid": floor_grid}
     segments.append(seg)
     if random.random() < .8:
         count = random.choice([1, 1, 2, 3])
@@ -266,6 +289,7 @@ def reset_game():
     global vel_x, vel_y, grounded, dead, paused, distance, run_gems, slam_count
     global cool_count, skill_timer, skill_active, shield_timer, magnet_timer, speed_timer
     global camera_x, camera_y, segments, gems, particles, warning_flash, last_result
+    global next_hole_x, prev_floor_grid, pattern_id
     screen_name = "game"
     play_state = "up_stop"
     play_timer = 0.0
@@ -284,18 +308,27 @@ def reset_game():
     segments, gems, particles = [], [], []
     warning_flash = 0.0
     last_result = {}
+    next_hole_x = 5.6
+    prev_floor_grid = 2
+    pattern_id = 0
     x = -8.0
     while x < 70:
         x = gen_segment(x, initial=(x < 4))
+    start_seg = next((s for s in segments if s["x"] <= world_x <= s["x"] + s["w"]), None)
+    if start_seg:
+        world_y = start_seg["floor"] + .48
+        grounded = True
     persist()
 
 def trigger_skill():
-    global skill_active, skill_timer, shield_timer, magnet_timer, speed_timer
+    global skill_active, skill_timer, shield_timer, magnet_timer, speed_timer, pattern_id
     ch = characters[selected]
     sid = int(ch.get("skill_id", 7))
     if skill_active or cool_count < int((ch.get("cooltime") or [10])[0]):
         return
     skill_active = True
+    if sid in (4, 9):
+        pattern_id = 3
     values = ch.get("skill_value", [10])
     duration = float(values[0] if values else 10) / 10.0
     skill_timer = max(1.0, min(5.0, duration))
@@ -401,7 +434,7 @@ def draw_world():
         floor_y = seg["floor"]
         # Source MakeSubRocks builds the ceiling segment to leave PLAYER_HEIGHT
         # (two grid cells) of extra room only at matching crevice segments.
-        roof_y = floor_y + roof_offset + (1.4 if seg["hole"] else 0.0)
+        roof_y = floor_y + roof_offset + seg["hole_height"]
         floor_top = H / 2 - (floor_y - camera_y) * 100
         draw_rock_block((sx, floor_top, sw, H - floor_top + 10), False, False)
         roof_bottom = H / 2 - (roof_y - camera_y) * 100
@@ -536,7 +569,7 @@ def rect_for_player():
 
 def update_game(dt, keys):
     global world_x, world_y, vel_x, vel_y, grounded, dead, camera_x, camera_y
-    global skill_timer, skill_active, shield_timer, magnet_timer, speed_timer
+    global skill_timer, skill_active, shield_timer, magnet_timer, speed_timer, pattern_id
     global distance, warning_flash
     if paused or dead:
         return
@@ -574,7 +607,7 @@ def update_game(dt, keys):
     # On the original map, the upper rock lowers to the lower rock every turn.
     # Only the paired crevice leaves two grid cells of clearance at full slam.
     body_top = world_y + .50
-    roof_bottom = (floor_seg["floor"] + roof_offset + (1.4 if floor_seg["hole"] else 0.0)) if floor_seg else 5.2 + roof_offset
+    roof_bottom = (floor_seg["floor"] + roof_offset + floor_seg["hole_height"]) if floor_seg else 5.2 + roof_offset
     if body_top >= roof_bottom and shield_timer <= 0:
         finish_run()
         return
@@ -598,6 +631,8 @@ def update_game(dt, keys):
         skill_timer -= dt
         if skill_timer <= 0:
             skill_active = False
+            if int(characters[selected].get("skill_id", 7)) in (4, 9):
+                pattern_id = 0
     if warning_flash > 0:
         warning_flash = max(0.0, warning_flash - dt)
     distance = max(distance, world_x)

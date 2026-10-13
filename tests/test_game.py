@@ -16,6 +16,20 @@ class GameSmokeTests(unittest.TestCase):
         self.assertEqual(game.map_data[0]["phase"], 0)
         self.assertGreater(game.map_data[0]["downVelY"], 0)
 
+    def test_matching_crevice_survives_ceiling_slam(self):
+        game.reset_game()
+        crevice = next(s for s in game.segments if s["hole"])
+        game.world_x = crevice["x"] + crevice["w"] * .5
+        game.world_y = crevice["floor"] + .48
+        game.grounded = True
+        game.camera_x = game.world_x + 1.3
+        game.play_state = "down"
+        game.roof_offset = .1
+        game.play_timer = 0.0
+        game.update_game(.04, pygame.key.get_pressed())
+        self.assertEqual(game.screen_name, "game")
+        self.assertEqual(game.roof_offset, 0.0)
+
     def test_game_loop_state_and_render(self):
         game.reset_game()
         keys = pygame.key.get_pressed()
@@ -23,6 +37,8 @@ class GameSmokeTests(unittest.TestCase):
             game.update_game(1 / 60, keys)
         game.draw_world()
         self.assertGreater(len(game.segments), 0)
+        self.assertTrue(any(s["hole"] and s["hole_height"] in (1.4, 2.1) for s in game.segments))
+        self.assertTrue(all(s["floor_grid"] >= 1 for s in game.segments))
         self.assertGreaterEqual(game.distance, 0)
         pygame.display.flip()
 
