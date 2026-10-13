@@ -1,39 +1,39 @@
-name: Build Windows PC version
+name: Validate recovered Unity project
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'UnityProject/**'
+      - '.github/workflows/build-windows.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: windows-latest
+  validate-recovered-project:
+    runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip pygame==2.6.1 pyinstaller
-      - name: Syntax check
-        run: python -m py_compile crevice_hero.py
-      - name: Run smoke tests
-        shell: pwsh
+      - name: Verify original Unity version and scenes
+        shell: bash
         run: |
-          $env:SDL_VIDEODRIVER = "dummy"
-          $env:SDL_AUDIODRIVER = "dummy"
-          python -m unittest discover -s tests -v
-      - name: Build Windows executable
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name CreviceHeroPC --add-data "assets;assets" --add-data "reference/original_data;reference/original_data" crevice_hero.py
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: CreviceHeroPC-Windows-x64
-          path: dist/CreviceHeroPC.exe
-          if-no-files-found: error
-          retention-days: 30
+          set -euo pipefail
+          test "$(tr -d '\r\n' < UnityProject/ProjectSettings/ProjectVersion.txt)" = 'm_EditorVersion: 4.5.5f1'
+          test -s UnityProject/Assets/Scenes/SplashScene.unity
+          test -s UnityProject/Assets/Scenes/PlayScene.unity
+          test -s UnityProject/ProjectSettings/EditorBuildSettings.asset
+          grep -q 'Assets/Scenes/SplashScene.unity' UnityProject/ProjectSettings/EditorBuildSettings.asset
+          grep -q 'Assets/Scenes/PlayScene.unity' UnityProject/ProjectSettings/EditorBuildSettings.asset
+      - name: Verify recovered original assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find UnityProject/Assets -type f -name '*.prefab' | wc -l)" -ge 50
+          test "$(find UnityProject/Assets/Scripts/Assembly-CSharp -type f -name '*.cs' | wc -l)" -ge 300
+          test "$(find UnityProject/Assets/Resources -maxdepth 1 -type f | wc -l)" -ge 80
+          test "$(find UnityProject/Assets/AudioClip -type f | wc -l)" -ge 15
+          echo 'Unity 4.5.5f1 project structure and recovered assets verified.'
+          echo 'This check does not claim a Windows player build; that requires running the legacy Unity editor.'
