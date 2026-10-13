@@ -12,7 +12,8 @@ A private-use PC reconstruction of Crevice Hero, using the prior analysis work r
 ## Current PC build
 
 - Title screen, character select (16 original names and character stats), options, pause, result screen, and persistent best-distance/gem save.
-- Side-scrolling cave movement using left/right controls, jumping, collectible gems, variable cave gaps, a warning phase, moving ceiling slam/recovery phases, skill/cooldown approximations, and rising map difficulty.
+- Side-scrolling cave movement using left/right controls, jumping, collectible gems, variable rock heights, paired crevices, a warning phase, moving ceiling slam/recovery phases, character-specific skill/cooldown behaviour, and rising map difficulty.
+- Animated sprite frames cropped from the recovered original character atlases, using each character’s original collider width/height and configured walk speed.
 - Windows x64 EXE built by GitHub Actions on every push to main.
 
 ## Controls
@@ -33,6 +34,6 @@ On Windows, run build_windows.bat, or download the workflow artifact from the Ac
 
 ## Accuracy notes
 
-This is a substantially closer reconstruction than the previous prototype, but it is not yet a bit-for-bit or pixel-perfect port of the original Unity game. The original gameplay code and configuration data are available as reference, while Unity scene/prefab wiring, all tk2d animation-library mappings, exact collider setup, some animation frames, and original audio still need further reconstruction and side-by-side validation. Android-only billing, ads, Google Play, and social services are intentionally omitted.
+This is a substantially closer reconstruction than the previous prototype, but it is not yet a bit-for-bit or pixel-perfect port of the original Unity game. The original gameplay code and configuration data are available as reference, while Unity scene/prefab wiring, the full 16 tk2d animation-library mappings, exact prefab colliders, some special-skill effects, and original audio still need further reconstruction and side-by-side validation. Android-only billing, ads, Google Play, and social services are intentionally omitted.
 
 This repository is intended to remain private. Original game assets and decompiled code remain subject to their rights holders' terms; do not publish or redistribute them without permission.

@@ -66,26 +66,16 @@ def crop_sprite(sheet, rect):
         return None
     return frame
 
-# These are hand-selected cells from the original tk2d sprite atlases. The
-# character metadata below is taken from the original embedded char resource.
-SPRITE_CELLS = {
-    0: (17, (4, 88, 58, 72)),
-    1: (17, (111, 89, 58, 76)),
-    2: (17, (289, 99, 58, 70)),
-    3: (17, (8, 212, 58, 75)),
-    4: (17, (67, 215, 58, 72)),
-    5: (17, (126, 216, 58, 72)),
-    6: (17, (188, 215, 58, 72)),
-    7: (17, (250, 215, 58, 72)),
-    8: (21, (428, 474, 73, 103)),
-    9: (21, (219, 424, 88, 85)),
-    10: (21, (307, 343, 85, 82)),
-    11: (21, (139, 807, 97, 97)),
-    12: (21, (386, 803, 97, 89)),
-    13: (26, (0, 17, 70, 76)),
-    14: (26, (128, 44, 67, 82)),
-    15: (26, (179, 312, 76, 200)),
+# The original build contains three character animation atlas families in the
+# recovered sharedassets. We retain full-body cells only, then animate with the
+# matching move/jump-like poses rather than stretching arbitrary atlas fragments.
+ANIM_CELLS = {
+    17: [(4, 88, 58, 72), (8, 212, 58, 75), (67, 215, 58, 72),
+         (126, 216, 58, 72), (250, 215, 58, 72)],
+    21: [(428, 474, 73, 103), (139, 807, 97, 97)],
+    26: [(0, 17, 70, 76), (128, 44, 67, 82)],
 }
+CHAR_FAMILY = [17, 17, 21, 21, 17, 21, 17, 17, 21, 26, 17, 17, 21, 21, 17, 26]
 characters = []
 try:
     raw = (REF / "char.json").read_text(encoding="utf-8")
@@ -99,13 +89,19 @@ if not characters:
                    "cooltime": [10, 9, 8, 7, 6, 5, 4], "width": .55, "height": 1.0}
                   for i in range(16)]
 
+hero_animations = {}
+for family, cells in ANIM_CELLS.items():
+    frames = []
+    for cell in cells:
+        frame = crop_sprite(atlases.get(family), cell)
+        if frame is not None:
+            frames.append(frame)
+    hero_animations[family] = frames or [crop_sprite(atlases.get(17), (4, 88, 58, 72))]
 hero_images = []
 for i, ch in enumerate(characters[:16]):
-    spec = SPRITE_CELLS.get(i, SPRITE_CELLS[0])
-    im = crop_sprite(atlases.get(spec[0]), spec[1])
-    if im is None:
-        im = crop_sprite(atlases.get(17), (4, 88, 58, 72))
-    hero_images.append(im)
+    family = CHAR_FAMILY[i % len(CHAR_FAMILY)]
+    frames = hero_animations.get(family, [])
+    hero_images.append(frames[0] if frames else crop_sprite(atlases.get(17), (4, 88, 58, 72)))
 
 def read_map_data():
     rows = []
@@ -184,6 +180,13 @@ warning_flash = 0.0
 next_hole_x = 5.6
 prev_floor_grid = 2
 pattern_id = 0
+freeze_timer = 0.0
+slow_timer = 0.0
+fly_timer = 0.0
+skill_id_active = -1
+map_span_grid = 0
+map_segment_index = 0
+gems_this_chunk = 0
 last_result = {}
 last_save_tick = 0
 mouse_down = False
@@ -237,7 +240,7 @@ def choose_map_phase():
     return map_data[min(len(map_data) - 1, max(0, phase_index))]
 
 def gen_segment(x, initial=False):
-    global next_hole_x, prev_floor_grid
+    global next_hole_x, prev_floor_grid, map_span_grid, map_segment_index, gems_this_chunk
     cfg = choose_map_phase()
     # Weighted width tables transcribed from Map.GenPatterns in the original C#.
     pattern_weights = [
@@ -277,11 +280,40 @@ def gen_segment(x, initial=False):
     seg = {"x": x, "w": width, "floor": floor_y, "hole": hole,
            "hole_height": hole_height, "floor_grid": floor_grid}
     segments.append(seg)
-    if random.random() < .8:
-        count = random.choice([1, 1, 2, 3])
-        for i in range(count):
-            gems.append({"x": x + width * (.28 + .23 * i), "y": floor_y + random.uniform(.9, 2.1),
-                         "taken": False, "phase": random.random() * math.tau})
+
+    # Port the original GemData.turns / Map.MakeSubRocks placement rules. The
+    # selected map phase chooses a gem pattern, and each slam advances its turn.
+    gem_row = next((row for row in gem_data if str(row.get("id", "")) == str(cfg["gemPattern"])), None)
+    turn_index = (slam_count + 1) % 5
+    turn_value = 0
+    if gem_row is not None:
+        try:
+            turn_value = int(gem_row.get("turn{}".format(turn_index + 1), 0))
+        except (TypeError, ValueError):
+            turn_value = 0
+    gem_here = False
+    if turn_value == 3 and gems_this_chunk <= 6:
+        gem_here = (map_segment_index % 3 == 0)
+    elif turn_value == 5:
+        gem_here = hole
+    elif turn_value != 6:
+        if turn_value == 8 and gems_this_chunk <= 6:
+            gem_here = True
+        elif turn_value == 1 and map_segment_index == 2:
+            gem_here = True
+        elif turn_value == 2 and map_segment_index in (2, 4):
+            gem_here = True
+    if gem_here:
+        gems.append({"x": x + width * .5, "y": floor_y + .7,
+                     "taken": False, "phase": random.random() * math.tau})
+        gems_this_chunk += 1
+
+    map_span_grid += grid_width
+    map_segment_index += 1
+    if map_span_grid >= 36:
+        map_span_grid = 0
+        map_segment_index = 0
+        gems_this_chunk = 0
     return x + width
 
 def reset_game():
@@ -289,7 +321,8 @@ def reset_game():
     global vel_x, vel_y, grounded, dead, paused, distance, run_gems, slam_count
     global cool_count, skill_timer, skill_active, shield_timer, magnet_timer, speed_timer
     global camera_x, camera_y, segments, gems, particles, warning_flash, last_result
-    global next_hole_x, prev_floor_grid, pattern_id
+    global next_hole_x, prev_floor_grid, pattern_id, freeze_timer, slow_timer, fly_timer, skill_id_active
+    global map_span_grid, map_segment_index, gems_this_chunk
     screen_name = "game"
     play_state = "up_stop"
     play_timer = 0.0
@@ -311,38 +344,86 @@ def reset_game():
     next_hole_x = 5.6
     prev_floor_grid = 2
     pattern_id = 0
+    freeze_timer = slow_timer = fly_timer = 0.0
+    skill_id_active = -1
+    map_span_grid = map_segment_index = gems_this_chunk = 0
     x = -8.0
     while x < 70:
         x = gen_segment(x, initial=(x < 4))
     start_seg = next((s for s in segments if s["x"] <= world_x <= s["x"] + s["w"]), None)
     if start_seg:
-        world_y = start_seg["floor"] + .48
+        # Unity's Hero transform is at the feet; its BoxCollider2D center is
+        # height/2 above that transform.
+        world_y = start_seg["floor"]
         grounded = True
     persist()
 
-def trigger_skill():
-    global skill_active, skill_timer, shield_timer, magnet_timer, speed_timer, pattern_id
+def trigger_skill(manual=True):
+    global skill_active, skill_timer, shield_timer, magnet_timer, speed_timer
+    global pattern_id, cool_count, world_x, world_y, camera_x, vel_y, grounded
+    global freeze_timer, slow_timer, fly_timer, skill_id_active
     ch = characters[selected]
     sid = int(ch.get("skill_id", 7))
-    if skill_active or cool_count < int((ch.get("cooltime") or [10])[0]):
+    manual_ids = (12, 15, 16)
+    if manual and sid not in manual_ids:
         return
-    skill_active = True
-    if sid in (4, 9):
-        pattern_id = 3
+    if not manual and sid in manual_ids:
+        return
+    need = int((ch.get("cooltime") or [10])[0])
+    if skill_active or cool_count < need:
+        return
     values = ch.get("skill_value", [10])
-    duration = float(values[0] if values else 10) / 10.0
-    skill_timer = max(1.0, min(5.0, duration))
-    # Keep the identity of each original skill: protective, time, magnet, speed,
-    # smash/flight variants are represented by PC-friendly local equivalents.
-    if sid in (1, 3, 5, 8, 9, 12, 15, 16):
-        shield_timer = max(shield_timer, skill_timer)
-    if sid in (5, 8, 10, 11):
-        magnet_timer = max(magnet_timer, skill_timer)
-    if sid in (4, 6, 13, 14, 2):
-        speed_timer = max(speed_timer, skill_timer)
-    if sid == 7:
-        shield_timer = max(shield_timer, 1.0)
+    # PlayerData passes the configured skill_value directly to GameController's
+    # duration timer; it is in seconds, not tenths of a second.
+    duration = max(1.0, float(values[0] if values else 10))
+    skill_active = True
+    skill_id_active = sid
+    skill_timer = duration
     cool_count = 0
+
+    if sid == 1:                 # map stop / blink
+        freeze_timer = max(freeze_timer, duration)
+    elif sid in (2, 3, 6, 11):  # rock-breaking, shelter, rebirth, transparency
+        shield_timer = max(shield_timer, min(duration, 4.0 if sid == 6 else duration))
+        if sid == 6:
+            freeze_timer = max(freeze_timer, 2.0)
+    elif sid in (4, 9):         # original speed-up skills
+        speed_timer = max(speed_timer, duration)
+        pattern_id = 3
+    elif sid == 5:               # teleport to a later floor-rock segment
+        target_x = world_x + 10.0
+        target = next((seg for seg in segments if seg["x"] <= target_x <= seg["x"] + seg["w"]), None)
+        world_x = target_x
+        if target:
+            world_y = target["floor"]
+            grounded = True
+        vel_y = 0.0
+        camera_x = max(0.0, world_x + 1.3)
+        magnet_timer = max(magnet_timer, 2.0)
+    elif sid == 7:               # John's original map-generation skill adds up to five gems
+        spawned = 0
+        for seg in segments:
+            if world_x + .5 < seg["x"] < world_x + 8 and spawned < 5:
+                for k in range(min(5 - spawned, max(1, min(3, int(seg["w"] / 1.2))))):
+                    gems.append({"x": seg["x"] + .4 + k * .45, "y": seg["floor"] + 1.0,
+                                 "taken": False, "phase": random.random() * math.tau})
+                    spawned += 1
+    elif sid == 8:               # flight skill
+        fly_timer = max(fly_timer, duration)
+        shield_timer = max(shield_timer, min(duration, 3.0))
+    elif sid == 10:              # slow map
+        slow_timer = max(slow_timer, duration)
+    elif sid == 12:              # hammer action
+        shield_timer = max(shield_timer, 1.5)
+    elif sid == 13:              # Snow skill effect
+        shield_timer = max(shield_timer, min(duration, 3.0))
+    elif sid == 14:              # Hulk breaks rocks
+        shield_timer = max(shield_timer, min(duration, 3.0))
+        speed_timer = max(speed_timer, duration)
+    elif sid == 15:              # soccer ball action
+        shield_timer = max(shield_timer, 1.2)
+    elif sid == 16:              # missile action
+        shield_timer = max(shield_timer, 1.5)
 
 def finish_run():
     global screen_name, last_result, dead, paused
@@ -360,6 +441,10 @@ def finish_run():
 
 def move_phase(dt):
     global play_state, play_timer, roof_offset, slam_count, cool_count, warning_flash
+    if freeze_timer > 0:
+        return
+    if slow_timer > 0:
+        dt *= .35
     play_timer += dt
     cfg = choose_map_phase()
     down_speed = max(4.0, float(cfg["downVelY"]))
@@ -375,7 +460,8 @@ def move_phase(dt):
         if roof_offset <= 0.0:
             play_state, play_timer = "down_stop", 0.0
             slam_count += 1
-            cool_count += 1
+            if not skill_active:
+                cool_count += 1
     elif play_state == "down_stop":
         if play_timer >= max(.25, float(cfg["downStopDuration"])):
             play_state, play_timer = "up", 0.0
@@ -452,13 +538,23 @@ def draw_world():
             pygame.draw.polygon(screen, WHITE, pts, 2)
             pygame.draw.line(screen, (255, 255, 255), (sx, sy - 8), (sx, sy + 8), 1)
     # Character sprite. We use the original sprite sheet art; fallback is vector-drawn.
+    family = CHAR_FAMILY[selected % len(CHAR_FAMILY)]
+    frames = hero_animations.get(family, [])
     hero = hero_images[selected] if selected < len(hero_images) else None
-    sx, sy = world_to_screen(world_x, world_y)
+    char_height = float(characters[selected].get("height", 1.0)) if selected < len(characters) else 1.0
+    char_width = float(characters[selected].get("width", .55)) if selected < len(characters) else .55
+    hero_center_y = world_y + char_height * .5
+    if frames:
+        if fly_timer > 0 or not grounded:
+            frame_index = min(1, len(frames) - 1)
+        elif abs(vel_x) > .1:
+            frame_index = 1 + (pygame.time.get_ticks() // 100) % max(1, len(frames) - 1)
+        else:
+            frame_index = 0
+        hero = frames[int(frame_index)]
+    sx, sy = world_to_screen(world_x, hero_center_y)
     if hero:
-        hscale = 1.0
-        if selected < len(characters):
-            hscale = max(.65, min(1.3, float(characters[selected].get("height", 1.0))))
-        pw, ph = int(62 * hscale), int(90 * hscale)
+        pw, ph = int(max(.3, char_width) * 100), int(max(.35, char_height) * 100)
         sprite = pygame.transform.scale(hero, (pw, ph))
         if vel_x < 0:
             sprite = pygame.transform.flip(sprite, True, False)
@@ -488,8 +584,14 @@ def draw_world():
     ch = characters[selected]
     text("{}".format(ch.get("name", "HERO")), W - 22, 22, SMALL, WHITE, True)
     skill_need = int((ch.get("cooltime") or [10])[0])
-    skill_label = "SKILL READY (E)" if cool_count >= skill_need and not skill_active else "SKILL  {}/{}".format(cool_count, skill_need)
-    button(skill_label, (W - 250, H - 66, 226, 42), cool_count >= skill_need and not skill_active)
+    manual_skill = int(ch.get("skill_id", 7)) in (12, 15, 16)
+    if skill_active:
+        skill_label = "SKILL ACTIVE  {:.0f}s".format(max(0, skill_timer))
+    elif manual_skill and cool_count >= skill_need:
+        skill_label = "USE SKILL (E)"
+    else:
+        skill_label = "SKILL  {}/{}".format(cool_count, skill_need)
+    button(skill_label, (W - 250, H - 66, 226, 42), manual_skill and cool_count >= skill_need and not skill_active)
     text("A/D or ←/→ move   SPACE jump   E skill   ESC pause", W / 2, H - 20, TINY, MUTED, True)
     if warning:
         panel((W // 2 - 190, 18, 380, 54), (90, 25, 18, 210), (255, 160, 90), 10)
@@ -559,33 +661,48 @@ def draw_result():
     button("MAIN MENU", (W // 2 - 140, 590, 280, 48))
 
 def rect_for_player():
-    px, py = world_to_screen(world_x, world_y)
-    width = 42
-    height = 88
-    if selected < len(characters):
-        width = max(30, int(float(characters[selected].get("width", .55)) * 75))
-        height = max(42, int(float(characters[selected].get("height", 1.0)) * 82))
+    height_world = float(characters[selected].get("height", 1.0)) if selected < len(characters) else 1.0
+    px, py = world_to_screen(world_x, world_y + height_world * .5)
+    width = max(30, int(float(characters[selected].get("width", .55)) * 100)) if selected < len(characters) else 55
+    height = max(42, int(height_world * 100))
     return pygame.Rect(px - width // 2, py - height // 2, width, height)
 
 def update_game(dt, keys):
     global world_x, world_y, vel_x, vel_y, grounded, dead, camera_x, camera_y
     global skill_timer, skill_active, shield_timer, magnet_timer, speed_timer, pattern_id
-    global distance, warning_flash
+    global distance, warning_flash, freeze_timer, slow_timer, fly_timer, skill_id_active
     if paused or dead:
         return
     move_phase(dt)
+    ch = characters[selected]
+    skill_need = int((ch.get("cooltime") or [10])[0])
+    if cool_count >= skill_need and int(ch.get("skill_id", 7)) not in (12, 15, 16) and not skill_active:
+        trigger_skill(manual=False)
+    if freeze_timer > 0:
+        freeze_timer = max(0.0, freeze_timer - dt)
+    if slow_timer > 0:
+        slow_timer = max(0.0, slow_timer - dt)
     cfg = choose_map_phase()
     left = keys[pygame.K_LEFT] or keys[pygame.K_a]
     right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
     speed = float(characters[selected].get("speed", 80)) * 7.0 / 80.0
+    if not grounded:
+        speed *= 6.0 / 7.0
     if speed_timer > 0:
-        speed *= 1.35
+        speed *= 2.5
         speed_timer = max(0.0, speed_timer - dt)
     vel_x = (-speed if left else speed if right else 0.0)
     old_y = world_y
-    vel_y -= 19.0 * dt
     world_x += vel_x * dt
-    world_y += vel_y * dt
+    if fly_timer > 0:
+        up = keys[pygame.K_UP] or keys[pygame.K_w]
+        down = keys[pygame.K_DOWN] or keys[pygame.K_s]
+        world_y += (2.8 if up else -2.8 if down else 0.0) * dt
+        vel_y = 0.0
+        fly_timer = max(0.0, fly_timer - dt)
+    else:
+        vel_y -= 19.0 * dt
+        world_y += vel_y * dt
     world_x = max(-1.0, world_x)
     camera_x = max(0.0, world_x + 1.3)
     camera_y = 4.1
@@ -595,18 +712,17 @@ def update_game(dt, keys):
         farthest = gen_segment(farthest)
     segments[:] = [s for s in segments if s["x"] + s["w"] > camera_x - 12]
     gems[:] = [g for g in gems if not g["taken"] and g["x"] > camera_x - 12]
-    # Resolve landing on the top face of the floor rock and falling through holes.
-    foot = world_y - .48
+    # Unity's Hero transform is at the feet; BoxCollider2D extends upward by
+    # the selected character's configured height.
     floor_seg = next((s for s in segments if s["x"] <= world_x <= s["x"] + s["w"]), None)
-    if floor_seg and vel_y <= 0 and foot <= floor_seg["floor"] and old_y - .48 >= floor_seg["floor"] - .2:
-        world_y = floor_seg["floor"] + .48
+    if floor_seg and vel_y <= 0 and world_y <= floor_seg["floor"]:
+        world_y = floor_seg["floor"]
         vel_y = 0.0
         grounded = True
     else:
         grounded = False
-    # On the original map, the upper rock lowers to the lower rock every turn.
-    # Only the paired crevice leaves two grid cells of clearance at full slam.
-    body_top = world_y + .50
+    body_height = float(characters[selected].get("height", 1.0))
+    body_top = world_y + body_height
     roof_bottom = (floor_seg["floor"] + roof_offset + floor_seg["hole_height"]) if floor_seg else 5.2 + roof_offset
     if body_top >= roof_bottom and shield_timer <= 0:
         finish_run()
@@ -616,7 +732,8 @@ def update_game(dt, keys):
         return
     # Original characters have different width/height values; pickups use overlap.
     for g in gems:
-        if not g["taken"] and abs(world_x - g["x"]) < .48 and abs(world_y - g["y"]) < .68:
+        player_center_y = world_y + body_height * .5
+        if not g["taken"] and abs(world_x - g["x"]) < .48 and abs(player_center_y - g["y"]) < .68:
             g["taken"] = True
             run_pickup(g)
     if magnet_timer > 0:
@@ -631,6 +748,7 @@ def update_game(dt, keys):
         skill_timer -= dt
         if skill_timer <= 0:
             skill_active = False
+            skill_id_active = -1
             if int(characters[selected].get("skill_id", 7)) in (4, 9):
                 pattern_id = 0
     if warning_flash > 0:
@@ -638,7 +756,7 @@ def update_game(dt, keys):
     distance = max(distance, world_x)
     # Store short dust bursts while moving on the ground.
     if grounded and abs(vel_x) > 0.1 and random.random() < .10:
-        particles.append({"x": world_x - .25, "y": world_y - .4, "vx": random.uniform(-1, 1),
+        particles.append({"x": world_x - .25, "y": world_y + .05, "vx": random.uniform(-1, 1),
                           "vy": random.uniform(.1, 1.2), "life": random.uniform(.15, .35)})
 
 def run_pickup(g):

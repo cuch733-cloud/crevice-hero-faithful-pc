@@ -5,3 +5,5 @@ dist/
 *.spec
 reference/sharedassets1.assets
 reference/sharedassets1.assets.*
+windows_artifact/
+preview_*.png
