@@ -255,19 +255,22 @@ def blit_world(img, wx, wy, width, height, flip=False):
     screen.blit(frame, (sx - sw // 2, sy - sh // 2))
 
 def map_phase_index():
-    return int(((slam_count / 3.0) + (int(distance) // 30)) * .5)
+    # Exact Map.CheckMapData formula from the recovered Unity C# source.
+    return max(0, int(((slam_count / 3.0) + (int(distance) // 30)) * .5))
 
 def choose_map_phase():
     return map_data[min(len(map_data) - 1, max(0, map_phase_index()))]
 
 def choose_theme():
+    # Map.UpdateTheme: themes are selected from the active map-data phase and
+    # total play count, not from the phase number alone.
     phase = map_phase_index()
     even_play = int(save.get("plays", 0)) % 2 == 0
     if phase <= 2:
         return 0
-    if phase <= 5:
+    if 3 <= phase <= 5:
         return 1 if even_play else 3
-    if phase <= 8:
+    if 6 <= phase <= 8:
         return 2
     return 3 if even_play else 1
 
@@ -287,11 +290,18 @@ def gen_segment(x, initial=False):
     grid_width = random.choice(width_choices or [2, 3, 4])
     width = grid_width * .7
     # Approximate MakeSubRocks' neighbour-height constraint with original phase maxHeight.
-    low = max(1, prev_floor_grid - 2)
-    high = max(low + 1, min(int(cfg["maxHeight"]), prev_floor_grid + 3))
-    floor_grid = random.randrange(low, high)
+    # Port of Map.MakeSubRocks: every third rock permits one extra grid
+    # of upward change; Random.Range's upper bound is exclusive in Unity too.
+    jump_height = 2
+    upward_allowance = jump_height - 1 if map_segment_index % 3 != 0 else jump_height
+    low = max(1, prev_floor_grid - jump_height)
+    high_exclusive = min(int(cfg["maxHeight"]), prev_floor_grid + upward_allowance + 1)
+    if high_exclusive <= low:
+        high_exclusive = low + 1
+    floor_grid = random.randrange(low, high_exclusive)
     if floor_grid == prev_floor_grid:
-        floor_grid = floor_grid + 1 if floor_grid < (1 + int(cfg["maxHeight"])) * .5 else floor_grid - 1
+        floor_grid = (floor_grid + 1 if floor_grid < (1 + int(cfg["maxHeight"])) * .5
+                      else floor_grid - 1)
     floor_grid = max(1, min(int(cfg["maxHeight"]), floor_grid))
     prev_floor_grid = floor_grid
     floor_y = floor_grid * .7
